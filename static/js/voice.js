@@ -46,18 +46,30 @@ function toggleRecord() {
 
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-        var input = document.getElementById('chatInput');
-        input.placeholder = '语音不可用，请打字输入...';
+        document.getElementById('chatInput').placeholder = '语音不可用，请打字输入...';
+        spawnDanmaku('此设备不支持语音，请打字练习', 'wrong');
         return;
     }
 
-    try { recognition = new SR(); } catch(e) { return; }
+    try { recognition = new SR(); } catch(e) {
+        spawnDanmaku('语音启动失败，请打字练习', 'wrong');
+        return;
+    }
 
     recognition.lang = 'en-US';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
+    var timeout = setTimeout(function() {
+        if (!isRecording) {
+            try { recognition.stop(); } catch(e) {}
+            spawnDanmaku('麦克风超时，请打字输入吧', 'wrong');
+            document.getElementById('chatInput').placeholder = '麦克风无响应，请打字...';
+        }
+    }, 5000);
+
     recognition.onstart = function() {
+        clearTimeout(timeout);
         isRecording = true;
         var btn = document.getElementById('recordBtn');
         btn.textContent = '⏹'; btn.style.background = 'var(--red)';
