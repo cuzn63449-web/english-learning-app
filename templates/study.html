@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h1 class="page-title" style="margin:0">📖 学习</h1>
+    <span class="tag tag-pink" id="progressTag">0/10</span>
+</div>
+<div id="levelBar" style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn btn-sm btn-primary" onclick="switchLevel('考研')">考研</button>
+    <button class="btn btn-sm btn-outline" onclick="switchLevel('专四')">专四</button>
+    <button class="btn btn-sm btn-outline" onclick="switchLevel('专八')">专八</button>
+</div>
+
+<div id="studyCard" style="display:none">
+    <div class="flashcard" id="flashcard" onclick="flipCard()">
+        <div class="flashcard-inner">
+            <div class="flashcard-front">
+                <div class="mark-star" id="markBtn1" onclick="event.stopPropagation();toggleMark()">☆</div>
+                <div class="flashcard-word" id="fcWord">--</div>
+                <div class="flashcard-phonetic" id="fcPhonetic"></div>
+                <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();speakWord()" style="margin-top:12px">🔊 发音</button>
+                <div class="flashcard-hint">👇 选择你认不认识这个词</div>
+            </div>
+            <div class="flashcard-back">
+                <div class="mark-star" id="markBtn2" onclick="event.stopPropagation();toggleMark()">☆</div>
+                <div class="flashcard-meaning" id="fcMeaning">--</div>
+                <div class="flashcard-extra" id="fcExtra"></div>
+                <div class="flashcard-hint" id="fcHint">👆 点击继续</div>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:8px" id="actionBtns">
+        <button class="btn btn-danger" style="flex:1;font-size:14px;padding:12px 8px" onclick="submitResult('wrong')">😕 不认识</button>
+        <button class="btn btn-outline" style="flex:1;font-size:14px;padding:12px 8px" onclick="submitResult('fuzzy')">🤔 模糊</button>
+        <button class="btn btn-success" style="flex:1;font-size:14px;padding:12px 8px" onclick="submitResult('correct')">😎 认识</button>
+    </div>
+</div>
+
+<div id="noWords" class="empty-mascot" style="display:none">
+    <div class="mascot">🐹</div>
+    <div class="msg">🎉 今天全部搞定！仓鼠给你鼓掌~<br>明天再来复习吧</div>
+    <a href="/" class="btn btn-primary" style="margin-top:16px">返回首页</a>
+</div>
+
+<div class="card" id="sessionStats" style="display:none;text-align:center">
+    <div class="section-title">本轮学习完成 ✨</div>
+    <div style="display:flex;justify-content:space-around;margin:12px 0">
+        <div><div style="font-size:28px;color:var(--green)" id="ssCorrect">0</div><div style="font-size:12px;color:var(--text-light)">认识</div></div>
+        <div><div style="font-size:28px;color:var(--gold)" id="ssFuzzy">0</div><div style="font-size:12px;color:var(--text-light)">模糊</div></div>
+        <div><div style="font-size:28px;color:var(--red)" id="ssWrong">0</div><div style="font-size:12px;color:var(--text-light)">不认识</div></div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="startStudy()">再来一组 🔄</button>
+    <a href="/" class="btn btn-outline btn-block" style="margin-top:8px">回首页</a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/flashcards.js"></script>
+{% endblock %}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>英语学习</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#7C9CBF">
+</head>
+<body>
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <nav class="bottom-nav">
+        <a href="/" class="nav-item {% if page == 'home' %}active{% endif %}">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">首页</span>
+        </a>
+        <a href="/study" class="nav-item {% if page == 'study' %}active{% endif %}">
+            <span class="nav-icon">📖</span>
+            <span class="nav-label">学习</span>
+        </a>
+        <a href="/vocabulary" class="nav-item {% if page == 'vocab' %}active{% endif %}">
+            <span class="nav-icon">📝</span>
+            <span class="nav-label">词汇</span>
+        </a>
+        <a href="/exercises" class="nav-item {% if page == 'exercises' %}active{% endif %}">
+            <span class="nav-icon">✨</span>
+            <span class="nav-label">AI练习</span>
+        </a>
+        <a href="/stats" class="nav-item {% if page == 'stats' %}active{% endif %}">
+            <span class="nav-icon">👤</span>
+            <span class="nav-label">我的</span>
+        </a>
+    </nav>
+
+    <div id="toast" class="toast"></div>
+    <div id="loading" class="loading-overlay" style="display:none">
+        <div class="loading-mascot">
+            <span class="mascot-hamster">🐹</span>
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div style="font-size:13px;color:var(--text-light)">小仓鼠在努力加载...</div>
+        </div>
+    </div>
+
+    <div id="costBubble" class="cost-bubble" onclick="this.classList.toggle('expanded')">
+        <span class="cost-icon">💰</span>
+        <span class="cost-text"><span id="costAmount">--</span></span>
+        <span class="cost-detail" id="costDetail"></span>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

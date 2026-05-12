@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Hi，来背单词吧 ✨</h1>
+
+<div class="stat-grid">
+    <div class="card stat-card">
+        <div class="stat-number" id="streak">0</div>
+        <div class="stat-label">连续学习天数</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="todayCount">0</div>
+        <div class="stat-label">今日已学</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="section-title">📋 今日待复习</div>
+    <div class="stat-number" id="reviewCount" style="font-size:28px">--</div>
+    <div style="margin-top:12px">
+        <a href="/study" class="btn btn-primary btn-block">开始学习</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="section-title">词汇掌握进度</div>
+    <div style="margin-bottom:8px">
+        <span style="font-size:13px;color:var(--text-light)">考研词汇</span>
+        <span style="float:right;font-size:13px;color:var(--pink-dark)" id="progressText">加载中...</span>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <a href="/vocabulary" class="card" style="text-decoration:none;text-align:center">
+        <div style="font-size:28px">📝</div>
+        <div style="font-size:14px;color:var(--text)">词汇库</div>
+    </a>
+    <a href="/exercises" class="card" style="text-decoration:none;text-align:center">
+        <div style="font-size:28px">✨</div>
+        <div style="font-size:14px;color:var(--text)">AI练习</div>
+    </a>
+    <a href="/reading" class="card" style="text-decoration:none;text-align:center">
+        <div style="font-size:28px">📖</div>
+        <div style="font-size:14px;color:var(--text)">阅读</div>
+    </a>
+    <a href="/wordbook" class="card" style="text-decoration:none;text-align:center">
+        <div style="font-size:28px">📌</div>
+        <div style="font-size:14px;color:var(--text)">生词本</div>
+    </a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+fetch('/api/stats').then(function(r){ return r.json(); }).then(function(d){
+    document.getElementById('streak').textContent = d.streak || 0;
+    document.getElementById('todayCount').textContent = d.today_words || 0;
+    document.getElementById('reviewCount').textContent = d.review_due || 0;
+    var pct = d.total_words ? Math.round(d.mastered / d.total_words * 100) : 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressText').textContent = (d.mastered||0) + '/' + (d.total_words||0) + ' 已掌握';
+});
+</script>
+{% endblock %}

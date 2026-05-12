@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">🎙️ 口语练习</h1>
+
+<div class="card" style="text-align:center">
+    <div style="font-size:64px;margin:20px 0" id="micIcon">🎤</div>
+    <p style="color:var(--text-light);margin-bottom:8px" id="statusText">点击开始录音</p>
+    <button class="btn btn-primary btn-lg" id="recordBtn" onclick="toggleRecord()" style="width:120px;height:120px;border-radius:50%;font-size:18px">开始录音</button>
+    <p style="font-size:12px;color:var(--text-light);margin-top:12px">说一段英语，AI帮你纠正发音和语法</p>
+</div>
+
+<div class="card" id="resultCard" style="display:none">
+    <div class="section-title">你说的：</div>
+    <p style="font-size:16px;color:var(--blue-dark)" id="spokenText">--</p>
+    <div class="section-title">AI纠错：</div>
+    <div id="correction"></div>
+</div>
+
+<div class="card">
+    <div class="section-title">💡 口语练习话题</div>
+    <button class="btn btn-sm btn-outline" style="margin:4px" onclick="setTopic('Introduce yourself and your hobbies')">自我介绍</button>
+    <button class="btn btn-sm btn-outline" style="margin:4px" onclick="setTopic('Describe your favorite book or movie')">喜欢的书/电影</button>
+    <button class="btn btn-sm btn-outline" style="margin:4px" onclick="setTopic('Why do you want to go to graduate school')">为什么考研</button>
+    <button class="btn btn-sm btn-outline" style="margin:4px" onclick="setTopic('My daily routine')">我的日常生活</button>
+    <p style="margin-top:8px;font-size:13px;color:var(--text-light)" id="topicHint"></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/voice.js"></script>
+{% endblock %}

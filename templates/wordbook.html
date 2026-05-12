@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">⭐ 我的收藏</h1>
+<div id="wordList"></div>
+<div id="emptyMsg" class="empty-mascot" style="display:none">
+    <div class="mascot">🐱</div>
+    <div class="msg">还没有收藏单词哦~<br>学习时点 ☆ 就能收藏</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function loadMarked() {
+    fetch('/api/words/marked').then(function(r){ return r.json(); }).then(function(data){
+        if (data.length === 0) {
+            document.getElementById('wordList').innerHTML = '';
+            document.getElementById('emptyMsg').style.display = 'block';
+            return;
+        }
+        document.getElementById('emptyMsg').style.display = 'none';
+        var html = '';
+        data.forEach(function(w){
+            html += '<div class="word-item">';
+            html += '<div><div class="word">'+w.word+'</div><div class="meaning">'+w.meaning.substring(0,40)+'</div></div>';
+            html += '<button class="btn btn-sm" style="color:var(--gold);flex-shrink:0" onclick="unmark('+w.id+',this)">★ 取消</button>';
+            html += '</div>';
+        });
+        document.getElementById('wordList').innerHTML = html;
+    });
+}
+
+function unmark(wordId, btn) {
+    fetch('/api/study/toggle_mark', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({word_id: wordId})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if (!d.marked) loadMarked();
+    });
+}
+
+loadMarked();
+</script>
+{% endblock %}

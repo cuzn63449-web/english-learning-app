@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h1 class="page-title" style="margin:0">✨ AI英语助教</h1>
+    <span class="tag tag-pink" id="learnedCount">--</span>
+</div>
+
+<div id="chatArea" style="margin-bottom:140px"></div>
+
+<div style="position:fixed;bottom:calc(var(--nav-height)+var(--safe-bottom)+52px);left:0;right:0;max-width:480px;margin:0 auto;padding:0 12px;z-index:101;display:flex;gap:6px;overflow-x:auto" id="quickBtns">
+    <button class="btn btn-sm btn-outline" onclick="quickSend('帮我出5道选择题')" style="white-space:nowrap;flex-shrink:0">📝 出题</button>
+    <button class="btn btn-sm btn-outline" onclick="quickSend('用我学过的词生成一篇阅读理解')" style="white-space:nowrap;flex-shrink:0">📖 阅读</button>
+    <button class="btn btn-sm btn-outline" onclick="quickSend('出一道写作题')" style="white-space:nowrap;flex-shrink:0">✍️ 写作</button>
+    <button class="btn btn-sm btn-outline" onclick="quickSend('帮我分析一篇文章')" style="white-space:nowrap;flex-shrink:0">🔍 分析</button>
+</div>
+
+<div id="inputBar" style="position:fixed;bottom:var(--nav-height);left:0;right:0;max-width:480px;margin:0 auto;background:var(--card);padding:10px 12px;z-index:101;display:flex;gap:8px;border-top:1px solid rgba(0,0,0,0.06);padding-bottom:calc(6px+var(--safe-bottom))">
+    <input id="chatInput" class="search-box" placeholder="输入你的答案或问题..." style="margin:0;flex:1" onkeydown="if(event.key==='Enter')sendMsg()">
+    <button class="btn btn-primary" onclick="sendMsg()">发送</button>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/exercises.js"></script>
+{% endblock %}

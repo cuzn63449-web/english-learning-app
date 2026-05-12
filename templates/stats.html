@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">👤 我的</h1>
+
+<div class="stat-grid">
+    <div class="card stat-card">
+        <div class="stat-number" id="streak">0</div>
+        <div class="stat-label">🔥 连续学习天数</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="todayWords">0</div>
+        <div class="stat-label">📖 今日学习</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="section-title">📊 词汇掌握</div>
+    <div style="display:flex;justify-content:space-around;text-align:center;margin:12px 0">
+        <div><div style="font-size:28px;color:var(--green)" id="mastered">0</div><div style="font-size:12px">已掌握</div></div>
+        <div><div style="font-size:28px;color:var(--gold)" id="learning">0</div><div style="font-size:12px">学习中</div></div>
+        <div><div style="font-size:28px;color:var(--text-light)" id="remaining">0</div><div style="font-size:12px">待学习</div></div>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="masterBar" style="width:0%"></div>
+    </div>
+    <p style="font-size:12px;color:var(--text-light);text-align:center">已掌握 <span id="pctText">0</span>%</p>
+</div>
+
+<div class="card">
+    <div class="section-title">📅 近7天学习量</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-around;height:100px;gap:6px" id="weekChart"></div>
+</div>
+
+<div class="card">
+    <div class="section-title">⚙️ 快捷入口</div>
+    <a href="/wordbook" class="btn btn-outline btn-block" style="margin-bottom:8px">⭐ 我的收藏（生词本）</a>
+    <a href="/oral" class="btn btn-outline btn-block">🎙️ 口语练习</a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+fetch('/api/stats').then(function(r){ return r.json(); }).then(function(d){
+    document.getElementById('streak').textContent = d.streak;
+    document.getElementById('todayWords').textContent = d.today_words;
+    document.getElementById('mastered').textContent = d.mastered;
+    document.getElementById('learning').textContent = d.learning || 0;
+    document.getElementById('remaining').textContent = (d.total_words - d.mastered - (d.learning||0));
+    var pct = d.total_words ? Math.round(d.mastered / d.total_words * 100) : 0;
+    document.getElementById('masterBar').style.width = pct + '%';
+    document.getElementById('pctText').textContent = pct;
+
+    // 近7天柱状图
+    var max = Math.max.apply(null, (d.week||[]).map(function(w){ return w.count; })) || 1;
+    var html = '';
+    (d.week||[]).forEach(function(w){
+        var h = Math.max(4, Math.round(w.count / max * 80));
+        html += '<div style="text-align:center;flex:1"><div style="background:linear-gradient(180deg,var(--pink),var(--pink-light));border-radius:6px 6px 0 0;height:'+h+'px;width:100%"></div><div style="font-size:10px;margin-top:4px">'+w.date+'</div><div style="font-size:10px;color:var(--pink-dark)">'+w.count+'</div></div>';
+    });
+    document.getElementById('weekChart').innerHTML = html;
+});
+</script>
+{% endblock %}

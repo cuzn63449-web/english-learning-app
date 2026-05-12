@@ -1,0 +1,4 @@
+__pycache__/
+english_app.db
+.env
+*.pyc

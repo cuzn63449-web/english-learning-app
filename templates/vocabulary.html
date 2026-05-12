@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">📝 词汇库 <span style="font-size:14px;color:var(--text-light);font-weight:400" id="totalBadge"></span></h1>
+
+<div id="levelBar" style="display:flex;gap:8px;margin-bottom:12px">
+    <button class="btn btn-sm btn-primary" onclick="switchLevel('考研')">考研</button>
+    <button class="btn btn-sm btn-outline" onclick="switchLevel('专四')">专四</button>
+    <button class="btn btn-sm btn-outline" onclick="switchLevel('专八')">专八</button>
+</div>
+
+<div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-box" id="searchInput" placeholder="搜索单词或释义..." oninput="search()">
+</div>
+
+<div id="wordList"></div>
+
+<div style="display:flex;justify-content:center;gap:8px;margin-top:16px" id="pagination"></div>
+
+<!-- 单词详情弹窗 -->
+<div class="detail-overlay" id="detailOverlay" style="display:none" onclick="if(event.target===this)closeDetail()">
+    <div class="detail-card" id="detailCard"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+var currentPage = 1, totalPages = 1, query = '', currentLevel = '考研';
+
+function switchLevel(level) {
+    currentLevel = level;
+    var btns = document.querySelectorAll('#levelBar .btn');
+    btns.forEach(function(b){
+        b.className = (b.textContent === level) ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline';
+    });
+    search(1);
+}
+
+function search(p) {
+    if (p) currentPage = p;
+    query = document.getElementById('searchInput').value;
+    showLoading();
+    fetch('/api/words?q='+encodeURIComponent(query)+'&page='+currentPage+'&level='+encodeURIComponent(currentLevel)).then(function(r){ return r.json(); }).then(function(d){
+        hideLoading();
+        renderList(d.words);
+        totalPages = d.pages;
+        document.getElementById('totalBadge').textContent = '('+d.total+'词)';
+        renderPagination();
+    });
+}
+
+function renderList(words) {
+    if (words.length === 0) {
+        document.getElementById('wordList').innerHTML = '<div class="empty-mascot"><div class="mascot">🐱</div><div class="msg">没找到这个词~</div></div>';
+        return;
+    }
+    var html = '';
+    words.forEach(function(w){
+        html += '<div class="word-item" onclick="openDetail('+w.id+')">';
+        html += '<div><div class="word">'+w.word;
+        if (w.frequency) html += ' <span class="tag tag-pink">考频'+w.frequency+'</span>';
+        html += '</div><div class="meaning">'+w.meaning.substring(0,50)+'</div></div>';
+        html += '<div style="font-size:12px;color:var(--text-light)">'+(w.part_of_speech||'')+'</div>';
+        html += '</div>';
+    });
+    document.getElementById('wordList').innerHTML = html;
+}
+
+function renderPagination() {
+    if (totalPages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+    var html = '';
+    html += '<button class="btn btn-sm btn-outline" onclick="search(1)" '+(currentPage===1?'disabled':'')+'>首页</button>';
+    html += '<button class="btn btn-sm btn-outline" onclick="search('+(currentPage-1)+')" '+(currentPage===1?'disabled':'')+'>‹</button>';
+    html += '<span class="tag tag-blue">'+currentPage+'/'+totalPages+'</span>';
+    html += '<button class="btn btn-sm btn-outline" onclick="search('+(currentPage+1)+')" '+(currentPage===totalPages?'disabled':'')+'>›</button>';
+    html += '<button class="btn btn-sm btn-outline" onclick="search('+totalPages+')" '+(currentPage===totalPages?'disabled':'')+'>末页</button>';
+    document.getElementById('pagination').innerHTML = html;
+}
+
+function openDetail(id) {
+    showLoading();
+    fetch('/api/words/'+id).then(function(r){ return r.json(); }).then(function(d){
+        hideLoading();
+        var w = d.word;
+        var html = '<div style="position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;background:var(--card)">';
+        html += '<h2 style="margin:0;color:var(--blue-dark)">'+w.word+'</h2>';
+        html += '<button class="btn btn-sm btn-outline" onclick="closeDetail()">✕</button></div>';
+        if (w.phonetic) html += '<p style="color:var(--text-light)">'+w.phonetic+'</p>';
+        html += '<p><span class="tag tag-blue">'+w.part_of_speech+'</span> <span class="tag tag-pink">'+w.level+'</span>';
+        if (w.frequency) html += ' <span class="tag tag-gold">考频: '+w.frequency+'</span>';
+        html += '</p>';
+        html += '<div class="section-title">释义</div><p>'+w.meaning+'</p>';
+        if (w.root_affix) html += '<div class="section-title">词根词缀</div><p>'+w.root_affix+'</p>';
+        if (w.derivatives) html += '<div class="section-title">派生词</div><p>'+w.derivatives+'</p>';
+        if (d.meanings.length > 0) {
+            html += '<div class="section-title">熟词生义</div>';
+            d.meanings.forEach(function(m){ html += '<p style="font-size:14px;margin-bottom:4px"><strong>'+m.meaning_type+':</strong> '+m.meaning+(m.example?' <span style="color:var(--text-light)">例: '+m.example+'</span>':''); });
+        }
+        if (d.exam_points.length > 0) {
+            html += '<div class="section-title">考试考点</div>';
+            d.exam_points.forEach(function(p){ html += '<p style="font-size:14px;margin-bottom:4px"><strong>'+p.point_type+':</strong> '+p.description+(p.example?' <span style="color:var(--text-light)">例: '+p.example+'</span>':''); });
+        }
+        if (d.progress) html += '<div class="section-title">学习进度</div><p>状态: <span class="tag tag-green">'+d.progress.status+'</span> | 下次复习: '+d.progress.next_review_date+'</p>';
+        document.getElementById('detailCard').innerHTML = html;
+        document.getElementById('detailOverlay').style.display = 'flex';
+    });
+}
+
+function closeDetail() { document.getElementById('detailOverlay').style.display = 'none'; }
+
+search(1);
+</script>
+{% endblock %}
