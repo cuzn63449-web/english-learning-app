@@ -3,7 +3,7 @@ import os
 import re
 from database import get_db, init_db
 
-CSV_FILE = os.path.join(os.path.dirname(__file__), "2025考研英语大纲词汇5500.csv")
+CSV_FILE = os.path.join(os.path.dirname(__file__), "2025kaoyan5500.csv")
 
 POS_MAP = {
     "n.": "n.", "v.": "v.", "vt.": "vt.", "vi.": "vi.",

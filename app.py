@@ -510,9 +510,19 @@ def api_cost():
     return jsonify(total=total, month=month, calls=calls, budget=10.0)
 
 
-# 启动时初始化数据库
+# 启动时初始化数据库+导入词汇
 from database import init_db
 init_db()
+
+def _auto_seed():
+    from database import get_db
+    db = get_db()
+    count = db.execute("SELECT COUNT(*) as n FROM words").fetchone()["n"]
+    db.close()
+    if count == 0:
+        import seed_data
+        seed_data.import_csv()
+_auto_seed()
 
 if __name__ == "__main__":
     app.run(debug=True)
