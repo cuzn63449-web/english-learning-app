@@ -1,8 +1,20 @@
-var recognition = null, isRecording = false, oralHistory = [];
+var recognition = null, isRecording = false, oralHistory = [], micSupported = false;
 
 function initOral() {
-    var area = document.getElementById('chatArea');
-    area.innerHTML = '<div class="chat-msg assistant"><div class="bubble">🎙️ 欢迎来到口语练习！<br><br>点下面按钮让我给你一段稿子照着念，或者直接点🎤录音说英语，AI会给你反馈~</div></div>';
+    // 检测语音支持
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+        try { var test = new SR(); micSupported = true; } catch(e) {}
+    }
+    if (!micSupported) {
+        document.getElementById('recordBtn').style.display = 'none';
+        document.getElementById('chatInput').style.marginLeft = '0';
+    }
+
+    document.getElementById('chatArea').innerHTML =
+        '<div class="chat-msg assistant"><div class="bubble">🎙️ 欢迎来到口语练习！<br><br>' +
+        (micSupported ? '点🎤录音或者说英语，AI给你反馈~' : '在下方输入框打字练习英语，AI帮你纠错~') +
+        '<br><br>也可以点上面按钮让我给你稿子照着念 👆</div></div>';
 }
 
 function quickOral(msg) {
@@ -32,7 +44,7 @@ function sendOralMsg() {
     fetch('/api/chat', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({message: '我练习了口语，内容是：\n' + text + '\n请从发音技巧、语法、用词方面给反馈和建议。像口语教练一样对话。', history: oralHistory})
+        body: JSON.stringify({message: '我练习了口语，内容是：\n' + text + '\n请从发音技巧、语法、用词方面给反馈。简洁回复。', history: oralHistory})
     }).then(function(r){ return r.json(); }).then(function(d){
         hideLoading();
         addBubble('assistant', d.reply);
@@ -42,19 +54,11 @@ function sendOralMsg() {
 }
 
 function toggleRecord() {
+    if (!micSupported) return;
     if (isRecording) { stopRecord(); return; }
 
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-        document.getElementById('chatInput').placeholder = '语音不可用，请打字输入...';
-        spawnDanmaku('此设备不支持语音，请打字练习', 'wrong');
-        return;
-    }
-
-    try { recognition = new SR(); } catch(e) {
-        spawnDanmaku('语音启动失败，请打字练习', 'wrong');
-        return;
-    }
+    try { recognition = new SR(); } catch(e) { return; }
 
     recognition.lang = 'en-US';
     recognition.interimResults = false;
@@ -63,14 +67,12 @@ function toggleRecord() {
     var timeout = setTimeout(function() {
         if (!isRecording) {
             try { recognition.stop(); } catch(e) {}
-            spawnDanmaku('麦克风超时，请打字输入吧', 'wrong');
-            document.getElementById('chatInput').placeholder = '麦克风无响应，请打字...';
+            spawnDanmaku('麦克风超时，请打字输入', 'wrong');
         }
     }, 5000);
 
     recognition.onstart = function() {
-        clearTimeout(timeout);
-        isRecording = true;
+        clearTimeout(timeout); isRecording = true;
         var btn = document.getElementById('recordBtn');
         btn.textContent = '⏹'; btn.style.background = 'var(--red)';
     };
@@ -81,20 +83,13 @@ function toggleRecord() {
         sendOralMsg();
     };
 
-    recognition.onerror = function(e) {
-        isRecording = false; resetUI();
-        document.getElementById('chatInput').placeholder = '录音失败，请打字...';
-    };
-
+    recognition.onerror = function(e) { isRecording = false; resetUI(); };
     recognition.onend = function() { isRecording = false; resetUI(); };
 
     try { recognition.start(); } catch(e) { isRecording = false; resetUI(); }
 }
 
-function stopRecord() {
-    try { if (recognition) recognition.stop(); } catch(e) {}
-    isRecording = false; resetUI();
-}
+function stopRecord() { try { recognition.stop(); } catch(e) {} isRecording = false; resetUI(); }
 
 function resetUI() {
     var btn = document.getElementById('recordBtn');
