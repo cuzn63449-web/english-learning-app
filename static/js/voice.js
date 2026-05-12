@@ -1,8 +1,44 @@
-var recognition = null, isRecording = false, currentTopic = '';
+var recognition = null, isRecording = false, oralHistory = [];
 
-function setTopic(topic) {
-    currentTopic = topic;
-    document.getElementById('topicHint').textContent = '当前话题：' + topic;
+function initOral() {
+    var area = document.getElementById('chatArea');
+    area.innerHTML = '<div class="chat-msg assistant"><div class="bubble">🎙️ 欢迎来到口语练习！<br><br>点下面按钮让我给你一段稿子照着念，或者直接点🎤录音说英语，AI会给你反馈~</div></div>';
+}
+
+function quickOral(msg) {
+    addBubble('user', msg);
+    showLoading();
+    fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg, history: oralHistory})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        hideLoading();
+        addBubble('assistant', d.reply);
+        oralHistory.push({role:'user', content:msg});
+        oralHistory.push({role:'assistant', content:d.reply});
+        updateCostBubble();
+    });
+}
+
+function sendOralMsg() {
+    var input = document.getElementById('chatInput');
+    var text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    addBubble('user', text);
+    oralHistory.push({role:'user', content:text});
+    showLoading();
+    fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: '我练习了口语，内容是：\n' + text + '\n请从发音技巧、语法、用词方面给反馈和建议。像口语教练一样对话。', history: oralHistory})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        hideLoading();
+        addBubble('assistant', d.reply);
+        oralHistory.push({role:'assistant', content:d.reply});
+        updateCostBubble();
+    });
 }
 
 function toggleRecord() {
@@ -10,16 +46,12 @@ function toggleRecord() {
 
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-        document.getElementById('statusText').textContent = '此浏览器不支持语音，请用输入框替代';
+        var input = document.getElementById('chatInput');
+        input.placeholder = '语音不可用，请打字输入...';
         return;
     }
 
-    try {
-        recognition = new SR();
-    } catch(e) {
-        document.getElementById('statusText').textContent = '语音功能不可用，请用输入框';
-        return;
-    }
+    try { recognition = new SR(); } catch(e) { return; }
 
     recognition.lang = 'en-US';
     recognition.interimResults = false;
@@ -28,68 +60,41 @@ function toggleRecord() {
     recognition.onstart = function() {
         isRecording = true;
         var btn = document.getElementById('recordBtn');
-        btn.textContent = '停止'; btn.style.background = 'var(--red)';
-        document.getElementById('micIcon').textContent = '🔴';
-        document.getElementById('statusText').textContent = '正在录音...';
+        btn.textContent = '⏹'; btn.style.background = 'var(--red)';
     };
 
     recognition.onresult = function(event) {
         var text = event.results[0][0].transcript;
-        document.getElementById('spokenText').textContent = text;
-        document.getElementById('resultCard').style.display = 'block';
-        document.getElementById('correction').innerHTML = '<span class="mascot-hamster">🐹</span> AI正在纠错...';
-        sendForCorrection(text);
+        document.getElementById('chatInput').value = text;
+        sendOralMsg();
     };
 
     recognition.onerror = function(e) {
         isRecording = false; resetUI();
-        document.getElementById('statusText').textContent = '录音失败: ' + (e.error||'未知错误');
+        document.getElementById('chatInput').placeholder = '录音失败，请打字...';
     };
 
     recognition.onend = function() { isRecording = false; resetUI(); };
 
-    try { recognition.start(); } catch(e) {
-        isRecording = false; resetUI();
-        document.getElementById('statusText').textContent = '无法启动录音，请检查麦克风权限';
-    }
+    try { recognition.start(); } catch(e) { isRecording = false; resetUI(); }
 }
 
 function stopRecord() {
     try { if (recognition) recognition.stop(); } catch(e) {}
-    isRecording = false;
-    resetUI();
+    isRecording = false; resetUI();
 }
 
 function resetUI() {
     var btn = document.getElementById('recordBtn');
-    btn.textContent = '开始录音'; btn.style.background = '';
-    document.getElementById('micIcon').textContent = '🎤';
-    document.getElementById('statusText').textContent = '点击开始录音，或用下方输入框打字练习';
+    btn.textContent = '🎤'; btn.style.background = '';
 }
 
-// 输入框替代方案
-function submitTextForCorrection() {
-    var input = document.getElementById('textInput');
-    var text = input.value.trim();
-    if (!text) return;
-    document.getElementById('spokenText').textContent = text;
-    document.getElementById('resultCard').style.display = 'block';
-    document.getElementById('correction').innerHTML = '<span class="mascot-hamster">🐹</span> AI正在纠错...';
-    sendForCorrection(text);
-    input.value = '';
+function addBubble(role, text) {
+    var div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    div.innerHTML = '<div class="bubble">' + text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</div>';
+    document.getElementById('chatArea').appendChild(div);
+    div.scrollIntoView({behavior: 'smooth'});
 }
 
-function sendForCorrection(text) {
-    var topicCtx = currentTopic ? ' 话题：' + currentTopic : '';
-    fetch('/api/chat', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            message: '我刚刚说了/写了这句英语，请帮我纠错：\n"' + text + '"\n' + topicCtx + '\n\n从发音、语法、用词方面给建议和润色版。简洁回复。',
-            history: []
-        })
-    }).then(function(r){ return r.json(); }).then(function(d){
-        document.getElementById('correction').innerHTML = d.reply.replace(/\n/g, '<br>');
-        updateCostBubble();
-    });
-}
+initOral();
