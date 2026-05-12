@@ -1,0 +1,9 @@
+{
+    "name": "英语学习",
+    "short_name": "背单词",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#F8F4F7",
+    "theme_color": "#7C9CBF",
+    "icons": []
+}
