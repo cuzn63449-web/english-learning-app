@@ -145,7 +145,7 @@ def api_study_start():
     today = date.today().isoformat()
 
     due = db.execute("""
-        SELECT up.id as pid, up.is_marked, up.next_review_date, up.status as prog_status,
+        SELECT up.id as pid, up.word_id, up.is_marked, up.next_review_date, up.status as prog_status,
                w.* FROM user_word_progress up
         JOIN words w ON up.word_id = w.id
         WHERE up.next_review_date <= ? AND up.status != 'mastered' AND w.level = ?
