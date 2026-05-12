@@ -308,22 +308,42 @@ def api_chat():
     history = data.get("history", [])
 
     db = get_db()
-    learned = db.execute("""
-        SELECT w.word, w.meaning FROM words w
-        JOIN user_word_progress up ON w.id = up.word_id
-        WHERE up.status IN ('learning','mastered') ORDER BY RANDOM() LIMIT 30
-    """).fetchall()
+    uid = get_user_id()
     total = db.execute("SELECT COUNT(*) as n FROM words").fetchone()["n"] or 0
     mastered = db.execute(
-        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='mastered'"
+        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='mastered' AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
     ).fetchone()["n"] or 0
+
+    # 智能选词：优先学习中+近期复习的，混合少量已掌握
+    learning_words = db.execute("""
+        SELECT w.word, w.meaning FROM words w
+        JOIN user_word_progress up ON w.id = up.word_id
+        WHERE up.status='learning' AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
+        ORDER BY up.last_review_date DESC LIMIT 20
+    """, (uid, uid)).fetchall()
+    mastered_words = db.execute("""
+        SELECT w.word, w.meaning FROM words w
+        JOIN user_word_progress up ON w.id = up.word_id
+        WHERE up.status='mastered' AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
+        ORDER BY RANDOM() LIMIT 10
+    """, (uid, uid)).fetchall()
+    learned = learning_words + mastered_words
     db.close()
 
     word_ctx = ""
     if learned:
-        word_ctx = "\n用户已掌握/正在学的词汇：\n" + "\n".join([f"- {r['word']} ({r['meaning']})" for r in learned])
+        word_ctx = "\n优先使用学习中词汇，少量已掌握词汇复习：\n" + "\n".join([f"- {r['word']} ({r['meaning'][:30]})" for r in learned[:20]])
 
-    system = f"""你是考研英语AI助教，也是用户的私人英语教练。用户词汇量{mastered}/{total}。{word_ctx}
+    system = f"""你是考研英语AI助教。用户已掌握{mastered}词，学习中{len(learning_words)}词。
+
+**出题门槛：已掌握词<10时不准出题！提示用户"先去学习页背单词，掌握10个以上再来～"**
+
+**选词：优先学习中词汇(70%)+少量已掌握复习(30%)，每次5-8词。**
+
+**出题铁律：全英文、标注考点、不出答案、考研风格。批改：逐题✅/❌+解析。**
+
+**语气：简洁+鼓励+网感。**{word_ctx}"""
 
 **核心能力：**
 1. 用已学词汇出选择题/完形填空（必须模仿真题格式，每道题标注考点）
@@ -372,15 +392,23 @@ def api_chat():
 # === AI练习 API（保留旧端点兼容）===
 @app.route("/api/exercises/quiz", methods=["POST"])
 def api_exercises_quiz():
+    uid = get_user_id()
     db = get_db()
+    mastered_count = db.execute(
+        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='mastered' AND (user_id=? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
+    ).fetchone()["n"] or 0
+    if mastered_count < 10:
+        db.close()
+        return jsonify({"error": f"先去学习页背单词吧！至少掌握10个词才能AI出题（当前：{mastered_count}）"}), 400
+
     learned = db.execute("""
         SELECT w.word, w.meaning FROM words w
         JOIN user_word_progress up ON w.id = up.word_id
-        WHERE up.status IN ('learning','mastered') ORDER BY RANDOM() LIMIT 30
-    """).fetchall()
+        WHERE up.status IN ('learning','mastered') AND (up.user_id=? OR (up.user_id IS NULL AND ? IS NULL))
+        ORDER BY CASE WHEN up.status='learning' THEN 0 ELSE 1 END, up.last_review_date DESC LIMIT 20
+    """, (uid, uid)).fetchall()
     db.close()
-    if len(learned) < 5:
-        return jsonify({"error": "先学一些单词再来吧！至少需要5个已学词汇"}), 400
 
     word_list = "\n".join([f"{r['word']} — {r['meaning']}" for r in learned])
     prompt = f"""用以下用户已学的词汇，出5道完形填空选择题。每道题在句中留一个空，给4个选项（标记正确答案）。
@@ -404,15 +432,23 @@ def api_exercises_quiz():
 
 @app.route("/api/exercises/reading", methods=["POST"])
 def api_exercises_reading():
+    uid = get_user_id()
     db = get_db()
+    mastered_count = db.execute(
+        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='mastered' AND (user_id=? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
+    ).fetchone()["n"] or 0
+    if mastered_count < 10:
+        db.close()
+        return jsonify({"error": f"先去学习页背单词吧！至少掌握10个词才能AI出题（当前：{mastered_count}）"}), 400
+
     learned = db.execute("""
         SELECT w.word, w.meaning FROM words w
         JOIN user_word_progress up ON w.id = up.word_id
-        WHERE up.status IN ('learning','mastered') ORDER BY RANDOM() LIMIT 25
-    """).fetchall()
+        WHERE up.status IN ('learning','mastered') AND (up.user_id=? OR (up.user_id IS NULL AND ? IS NULL))
+        ORDER BY CASE WHEN up.status='learning' THEN 0 ELSE 1 END, up.last_review_date DESC LIMIT 20
+    """, (uid, uid)).fetchall()
     db.close()
-    if len(learned) < 10:
-        return jsonify({"error": "至少需要10个已学词汇才能生成阅读"}), 400
 
     word_list = ", ".join([r["word"] for r in learned])
     prompt = f"""用以下词汇写一篇150-200词的英文短文，然后出3道阅读理解选择题（4选1，标正确答案）。
@@ -431,15 +467,25 @@ def api_exercises_reading():
 @app.route("/api/exercises/writing", methods=["POST"])
 def api_exercises_writing():
     data = request.get_json() or {}
-    mode = data.get("mode", "prompt")  # prompt or correct
+    mode = data.get("mode", "prompt")
     user_text = data.get("text", "")
+    uid = get_user_id()
 
     db = get_db()
+    mastered_count = db.execute(
+        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='mastered' AND (user_id=? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
+    ).fetchone()["n"] or 0
+    if mode == "prompt" and mastered_count < 10:
+        db.close()
+        return jsonify({"error": f"先去学习页背单词吧！至少掌握10个词才能AI出题（当前：{mastered_count}）"}), 400
+
     learned = db.execute("""
         SELECT w.word FROM words w
         JOIN user_word_progress up ON w.id = up.word_id
-        WHERE up.status IN ('learning','mastered') ORDER BY RANDOM() LIMIT 20
-    """).fetchall()
+        WHERE up.status IN ('learning','mastered') AND (up.user_id=? OR (up.user_id IS NULL AND ? IS NULL))
+        ORDER BY CASE WHEN up.status='learning' THEN 0 ELSE 1 END, up.last_review_date DESC LIMIT 20
+    """, (uid, uid)).fetchall()
     db.close()
     word_list = ", ".join([r["word"] for r in learned]) if learned else "常用考研词汇"
 
