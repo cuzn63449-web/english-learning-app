@@ -7,6 +7,10 @@
     <p style="color:var(--text-light);margin-bottom:8px" id="statusText">点击开始录音</p>
     <button class="btn btn-primary btn-lg" id="recordBtn" onclick="toggleRecord()" style="width:120px;height:120px;border-radius:50%;font-size:18px">开始录音</button>
     <p style="font-size:12px;color:var(--text-light);margin-top:12px">说一段英语，AI帮你纠正发音和语法</p>
+    <div style="display:flex;gap:8px;margin-top:12px">
+        <input id="textInput" class="search-box" placeholder="或直接打字，AI帮你纠错..." style="margin:0;flex:1;font-size:14px">
+        <button class="btn btn-sm btn-primary" onclick="submitTextForCorrection()">提交</button>
+    </div>
 </div>
 
 <div class="card" id="resultCard" style="display:none">
