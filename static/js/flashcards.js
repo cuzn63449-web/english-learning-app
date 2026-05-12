@@ -1,7 +1,7 @@
 // === 闪卡学习 ===
 var words = [], currentIdx = 0, counts = {correct:0, fuzzy:0, wrong:0};
 var currentWordId = null, cardFlipped = false, waitingForTap = false;
-var currentLevel = '考研';
+var currentLevel = '考研', sessionId = Date.now();
 
 function switchLevel(level) {
     currentLevel = level;
@@ -168,7 +168,7 @@ function submitResult(result) {
     fetch('/api/study/result', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({word_id: currentWordId, result: result})
+        body: JSON.stringify({word_id: currentWordId, result: result, session_id: sessionId})
     }).then(function(r){ return r.json(); }).then(function(d){
         console.log('saved', d);
     });

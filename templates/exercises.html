@@ -12,6 +12,13 @@
     <button class="btn btn-sm btn-outline" onclick="quickSend('分析一篇文章')" style="white-space:nowrap;flex-shrink:0;font-size:12px">🔍 分析</button>
 </div>
 
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <span style="font-size:13px;color:var(--text-light);white-space:nowrap">📋 单词组：</span>
+    <select id="groupSelect" onchange="changeGroup()" class="search-box" style="padding:8px 12px;margin:0;flex:1;font-size:13px">
+        <option value="">全部词汇（智能选择）</option>
+    </select>
+</div>
+
 <div id="chatArea" style="margin-bottom:80px"></div>
 
 <div style="position:fixed;bottom:calc(var(--nav-height) + var(--safe-bottom) + 6px);left:0;right:0;max-width:480px;margin:0 auto;background:var(--card);padding:8px 14px;z-index:101;display:flex;gap:8px;border-top:1px solid rgba(0,0,0,0.06);padding-bottom:max(8px, var(--safe-bottom))">

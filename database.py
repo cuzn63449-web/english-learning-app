@@ -67,6 +67,8 @@ def init_db():
             last_review_date DATE,
             last_review_result TEXT,
             is_marked INTEGER DEFAULT 0,
+            group_id INTEGER,
+            created_at TIMESTAMP,
             FOREIGN KEY (word_id) REFERENCES words(id) ON DELETE CASCADE,
             UNIQUE(word_id, user_id)
         );

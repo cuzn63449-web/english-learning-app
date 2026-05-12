@@ -194,11 +194,15 @@ def api_study_start():
 def api_study_result():
     data = request.get_json()
     word_id = data["word_id"]
-    result = data["result"]  # correct / fuzzy / wrong
+    result = data["result"]
+    session_id = data.get("session_id", "")
 
     db = get_db()
     today = date.today().isoformat()
     uid = get_user_id()
+
+    # 分配组号（每10个词一组）
+    group_id = int(session_id) if session_id else None
 
     # 获取或创建进度记录
     prog = db.execute(
@@ -208,8 +212,8 @@ def api_study_result():
 
     if not prog:
         db.execute(
-            "INSERT INTO user_word_progress (word_id, user_id, status, next_review_date) VALUES (?, ?, 'new', ?)",
-            (word_id, uid, today)
+            "INSERT INTO user_word_progress (word_id, user_id, group_id, created_at, status, next_review_date) VALUES (?, ?, ?, datetime('now','localtime'), 'new', ?)",
+            (word_id, uid, group_id, today)
         )
         db.commit()
         prog = db.execute(
@@ -300,12 +304,28 @@ def api_marked_words():
     return jsonify([dict(r) for r in rows])
 
 
+# === 单词组 API ===
+@app.route("/api/groups")
+def api_groups():
+    uid = get_user_id()
+    db = get_db()
+    groups = db.execute("""
+        SELECT DISTINCT group_id, COUNT(*) as cnt, MIN(created_at) as date
+        FROM user_word_progress
+        WHERE group_id IS NOT NULL AND (user_id=? OR (user_id IS NULL AND ? IS NULL))
+        GROUP BY group_id ORDER BY group_id DESC LIMIT 20
+    """, (uid, uid)).fetchall()
+    db.close()
+    return jsonify([{"id": g["group_id"], "count": g["cnt"], "date": g["date"][:10]} for g in groups])
+
+
 # === 聊天 API ===
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     data = request.get_json()
     user_msg = data.get("message", "")
     history = data.get("history", [])
+    group_id = data.get("group_id", "")
 
     db = get_db()
     uid = get_user_id()
@@ -315,20 +335,27 @@ def api_chat():
         (uid, uid)
     ).fetchone()["n"] or 0
 
-    # 智能选词：优先学习中+近期复习的，混合少量已掌握
-    learning_words = db.execute("""
-        SELECT w.word, w.meaning FROM words w
-        JOIN user_word_progress up ON w.id = up.word_id
-        WHERE up.status='learning' AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
-        ORDER BY up.last_review_date DESC LIMIT 20
-    """, (uid, uid)).fetchall()
-    mastered_words = db.execute("""
-        SELECT w.word, w.meaning FROM words w
-        JOIN user_word_progress up ON w.id = up.word_id
-        WHERE up.status='mastered' AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
-        ORDER BY RANDOM() LIMIT 10
-    """, (uid, uid)).fetchall()
-    learned = learning_words + mastered_words
+    if group_id:
+        learned = db.execute("""
+            SELECT w.word, w.meaning FROM words w
+            JOIN user_word_progress up ON w.id = up.word_id
+            WHERE up.group_id=? AND (up.user_id=? OR (up.user_id IS NULL AND ? IS NULL))
+            LIMIT 20
+        """, (group_id, uid, uid)).fetchall()
+    else:
+        learning_words = db.execute("""
+            SELECT w.word, w.meaning FROM words w
+            JOIN user_word_progress up ON w.id = up.word_id
+            WHERE up.status='learning' AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
+            ORDER BY up.last_review_date DESC LIMIT 20
+        """, (uid, uid)).fetchall()
+        mastered_words = db.execute("""
+            SELECT w.word, w.meaning FROM words w
+            JOIN user_word_progress up ON w.id = up.word_id
+            WHERE up.status='mastered' AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
+            ORDER BY RANDOM() LIMIT 10
+        """, (uid, uid)).fetchall()
+        learned = learning_words + mastered_words
     db.close()
 
     word_ctx = ""
