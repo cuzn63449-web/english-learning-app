@@ -38,6 +38,12 @@ def import_csv():
         word = row[0].strip()
         meaning_raw = row[1].strip() if len(row) > 1 else ""
 
+        # 跳过空释义（专有名词等CSV解析失败的词）
+        if not meaning_raw or len(meaning_raw) < 2:
+            print(f"  skip empty: {word}")
+            skipped += 1
+            continue
+
         # 多行释义合并
         meaning_raw = meaning_raw.replace("\n", "; ")
 
