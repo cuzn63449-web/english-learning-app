@@ -56,10 +56,8 @@ function renderList(words) {
     var html = '';
     words.forEach(function(w){
         html += '<div class="word-item" onclick="openDetail('+w.id+')">';
-        // 推荐判断：排除基础词，保留考研核心词
-        var basicWords = ['a','an','the','is','am','are','was','were','be','been','being','have','has','had','do','does','did','will','would','can','could','may','might','shall','should','must','i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their','and','or','but','if','so','nor','for','yet','not','no','yes','to','in','on','at','of','by','from','up','out','down','off','over','under','also','too','very','just','only','then','now','here','there','this','that','these','those','one','two','each','every','all','both','few','more','most','other','some','such','than','too','very','well','far','much','many','good','bad','big','small','old','new'];
-        var isBasic = basicWords.indexOf(w.word.toLowerCase()) >= 0;
-        var isImportant = !isBasic && w.meaning && (w.meaning.indexOf(';') > 0 || w.meaning.length > 30 || w.part_of_speech.indexOf(';') > 0);
+        // 高频词推荐（基于真实考研考频数据）
+        var isImportant = w.frequency > 0;
         html += '<div><div class="word">'+w.word+(isImportant?' <span class="tag tag-gold" style="font-size:10px">推荐AI</span>':'');
         html += '</div><div class="meaning">'+w.meaning.substring(0,50)+'</div></div>';
         html += '<div style="font-size:12px;color:var(--text-light)">'+(w.part_of_speech||'')+'</div>';
