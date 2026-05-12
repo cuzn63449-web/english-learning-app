@@ -2,6 +2,23 @@
 {% block content %}
 <h1 class="page-title">👤 我的</h1>
 
+<div class="card" id="authCard">
+    <div id="authStatus"><span class="mascot-hamster">🐹</span> 加载中...</div>
+    <div id="authForms" style="display:none">
+        <div class="section-title" id="authTitle">登录</div>
+        <input class="search-box" id="authUser" placeholder="用户名" style="margin-bottom:8px">
+        <input class="search-box" id="authPass" type="password" placeholder="密码" style="margin-bottom:12px">
+        <button class="btn btn-primary btn-block" id="authBtn" onclick="doAuth()">登录</button>
+        <button class="btn btn-sm btn-outline btn-block" style="margin-top:6px" id="switchBtn" onclick="switchAuth()">没有账号？注册</button>
+        <button class="btn btn-sm btn-outline btn-block" style="margin-top:4px" id="guestBtn" onclick="goGuest()">👻 游客模式</button>
+    </div>
+    <div id="userInfo" style="display:none">
+        <p>👋 <strong id="displayName">--</strong></p>
+        <p style="font-size:12px;color:var(--text-light)">正式用户 · 数据永久保存 · 跨设备同步</p>
+        <button class="btn btn-sm btn-outline" onclick="doLogout()" style="margin-top:8px">退出登录</button>
+    </div>
+</div>
+
 <div class="stat-grid">
     <div class="card stat-card">
         <div class="stat-number" id="streak">0</div>
@@ -20,9 +37,7 @@
         <div><div style="font-size:28px;color:var(--gold)" id="learning">0</div><div style="font-size:12px">学习中</div></div>
         <div><div style="font-size:28px;color:var(--text-light)" id="remaining">0</div><div style="font-size:12px">待学习</div></div>
     </div>
-    <div class="progress-bar">
-        <div class="progress-fill" id="masterBar" style="width:0%"></div>
-    </div>
+    <div class="progress-bar"><div class="progress-fill" id="masterBar" style="width:0%"></div></div>
     <p style="font-size:12px;color:var(--text-light);text-align:center">已掌握 <span id="pctText">0</span>%</p>
 </div>
 
@@ -33,30 +48,79 @@
 
 <div class="card">
     <div class="section-title">⚙️ 快捷入口</div>
-    <a href="/wordbook" class="btn btn-outline btn-block" style="margin-bottom:8px">⭐ 我的收藏（生词本）</a>
+    <a href="/wordbook" class="btn btn-outline btn-block" style="margin-bottom:8px">⭐ 我的收藏</a>
     <a href="/oral" class="btn btn-outline btn-block">🎙️ 口语练习</a>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
-fetch('/api/stats').then(function(r){ return r.json(); }).then(function(d){
-    document.getElementById('streak').textContent = d.streak;
-    document.getElementById('todayWords').textContent = d.today_words;
-    document.getElementById('mastered').textContent = d.mastered;
-    document.getElementById('learning').textContent = d.learning || 0;
-    document.getElementById('remaining').textContent = (d.total_words - d.mastered - (d.learning||0));
-    var pct = d.total_words ? Math.round(d.mastered / d.total_words * 100) : 0;
-    document.getElementById('masterBar').style.width = pct + '%';
-    document.getElementById('pctText').textContent = pct;
+var isLogin = true;
 
-    // 近7天柱状图
-    var max = Math.max.apply(null, (d.week||[]).map(function(w){ return w.count; })) || 1;
-    var html = '';
-    (d.week||[]).forEach(function(w){
-        var h = Math.max(4, Math.round(w.count / max * 80));
-        html += '<div style="text-align:center;flex:1"><div style="background:linear-gradient(180deg,var(--pink),var(--pink-light));border-radius:6px 6px 0 0;height:'+h+'px;width:100%"></div><div style="font-size:10px;margin-top:4px">'+w.date+'</div><div style="font-size:10px;color:var(--pink-dark)">'+w.count+'</div></div>';
+function checkAuth() {
+    fetch('/api/auth/me').then(function(r){ return r.json(); }).then(function(d){
+        if (d.logged_in) {
+            document.getElementById('authForms').style.display = 'none';
+            document.getElementById('userInfo').style.display = 'block';
+            document.getElementById('displayName').textContent = d.username;
+            document.getElementById('authStatus').style.display = 'none';
+        } else {
+            document.getElementById('authForms').style.display = 'block';
+            document.getElementById('userInfo').style.display = 'none';
+            document.getElementById('authStatus').style.display = 'none';
+        }
     });
-    document.getElementById('weekChart').innerHTML = html;
-});
+}
+
+function switchAuth() {
+    isLogin = !isLogin;
+    document.getElementById('authTitle').textContent = isLogin ? '登录' : '注册';
+    document.getElementById('authBtn').textContent = isLogin ? '登录' : '注册';
+    document.getElementById('switchBtn').textContent = isLogin ? '没有账号？注册' : '已有账号？登录';
+    document.getElementById('guestBtn').style.display = isLogin ? 'inline-block' : 'none';
+}
+
+function doAuth() {
+    var u = document.getElementById('authUser').value.trim();
+    var p = document.getElementById('authPass').value.trim();
+    if (!u || !p) return;
+    var url = isLogin ? '/api/auth/login' : '/api/auth/register';
+    fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, password:p})})
+    .then(function(r){ return r.json(); }).then(function(d){
+        if (d.error) { spawnDanmaku(d.error, 'wrong'); return; }
+        spawnDanmaku(isLogin ? '登录成功！'+d.username : '注册成功！欢迎 '+d.username, 'correct');
+        checkAuth(); loadStats();
+    });
+}
+
+function doLogout() {
+    fetch('/api/auth/logout', {method:'POST'}).then(function(){ checkAuth(); loadStats(); });
+}
+
+function goGuest() {
+    checkAuth(); loadStats();
+    spawnDanmaku('已切换为游客模式 👻', 'fuzzy');
+}
+
+function loadStats() {
+    fetch('/api/stats').then(function(r){ return r.json(); }).then(function(d){
+        document.getElementById('streak').textContent = d.streak;
+        document.getElementById('todayWords').textContent = d.today_words;
+        document.getElementById('mastered').textContent = d.mastered;
+        document.getElementById('learning').textContent = d.learning || 0;
+        document.getElementById('remaining').textContent = (d.total_words - d.mastered - (d.learning||0));
+        var pct = d.total_words ? Math.round(d.mastered / d.total_words * 100) : 0;
+        document.getElementById('masterBar').style.width = pct + '%';
+        document.getElementById('pctText').textContent = pct;
+        var max = Math.max.apply(null, (d.week||[]).map(function(w){ return w.count; })) || 1;
+        var html = '';
+        (d.week||[]).forEach(function(w){
+            var h = Math.max(4, Math.round(w.count / max * 80));
+            html += '<div style="text-align:center;flex:1"><div style="background:linear-gradient(180deg,var(--pink),var(--pink-light));border-radius:6px 6px 0 0;height:'+h+'px;width:100%"></div><div style="font-size:10px;margin-top:4px">'+w.date+'</div><div style="font-size:10px;color:var(--pink-dark)">'+w.count+'</div></div>';
+        });
+        document.getElementById('weekChart').innerHTML = html;
+    });
+}
+
+checkAuth(); loadStats();
 </script>
 {% endblock %}

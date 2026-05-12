@@ -1,8 +1,65 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session
 from database import get_db
 from datetime import date, timedelta
+import json, hashlib
 
 app = Flask(__name__)
+app.secret_key = "english-learn-secret-2026"
+
+# === 用户系统 ===
+def get_user_id():
+    return session.get("user_id")  # None = 游客
+
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+@app.route("/api/auth/register", methods=["POST"])
+def api_register():
+    data = request.get_json()
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+    if len(username) < 2 or len(password) < 3:
+        return jsonify({"error": "用户名至少2位，密码至少3位"}), 400
+    db = get_db()
+    exist = db.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
+    if exist:
+        db.close()
+        return jsonify({"error": "用户名已被注册"}), 400
+    db.execute("INSERT INTO users (username, password_hash) VALUES (?,?)", (username, hash_pw(password)))
+    db.commit()
+    user = db.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
+    db.close()
+    session["user_id"] = user["id"]
+    return jsonify({"ok": True, "username": username, "user_id": user["id"]})
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_login():
+    data = request.get_json()
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+    db = get_db()
+    user = db.execute("SELECT id, password_hash FROM users WHERE username=?", (username,)).fetchone()
+    db.close()
+    if not user or user["password_hash"] != hash_pw(password):
+        return jsonify({"error": "用户名或密码错误"}), 401
+    session["user_id"] = user["id"]
+    return jsonify({"ok": True, "username": username, "user_id": user["id"]})
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_logout():
+    session.pop("user_id", None)
+    return jsonify({"ok": True})
+
+@app.route("/api/auth/me")
+def api_me():
+    uid = get_user_id()
+    if not uid:
+        return jsonify({"logged_in": False, "username": "游客"})
+    db = get_db()
+    user = db.execute("SELECT username FROM users WHERE id=?", (uid,)).fetchone()
+    db.close()
+    return jsonify({"logged_in": True, "username": user["username"], "user_id": uid})
+
 
 # === 页面路由 ===
 @app.route("/")
@@ -83,6 +140,7 @@ def sm2_calc(progress, result):
 @app.route("/api/study/start")
 def api_study_start():
     level = request.args.get("level", "考研")
+    uid = get_user_id()
     db = get_db()
     today = date.today().isoformat()
 
@@ -91,8 +149,9 @@ def api_study_start():
                w.* FROM user_word_progress up
         JOIN words w ON up.word_id = w.id
         WHERE up.next_review_date <= ? AND up.status != 'mastered' AND w.level = ?
+        AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
         ORDER BY up.next_review_date ASC LIMIT 12
-    """, (today, level)).fetchall()
+    """, (today, level, uid, uid)).fetchall()
 
     words = []
     seen_ids = set()
@@ -110,10 +169,14 @@ def api_study_start():
     if len(words) < 10:
         new = db.execute("""
             SELECT w.* FROM words w
-            WHERE w.id NOT IN (SELECT word_id FROM user_word_progress) AND w.level = ?
+            WHERE w.id NOT IN (
+                SELECT word_id FROM user_word_progress
+                WHERE user_id = ? OR (user_id IS NULL AND ? IS NULL)
+            )
+            AND w.level = ?
             ORDER BY RANDOM()
             LIMIT ?
-        """, (level, 10 - len(words))).fetchall()
+        """, (uid, uid, level, 10 - len(words))).fetchall()
 
         for r in new:
             if len(words) >= 10:
@@ -135,20 +198,23 @@ def api_study_result():
 
     db = get_db()
     today = date.today().isoformat()
+    uid = get_user_id()
 
     # 获取或创建进度记录
     prog = db.execute(
-        "SELECT * FROM user_word_progress WHERE word_id = ?", (word_id,)
+        "SELECT * FROM user_word_progress WHERE word_id = ? AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (word_id, uid, uid)
     ).fetchone()
 
     if not prog:
         db.execute(
-            "INSERT INTO user_word_progress (word_id, status, next_review_date) VALUES (?, 'new', ?)",
-            (word_id, today)
+            "INSERT INTO user_word_progress (word_id, user_id, status, next_review_date) VALUES (?, ?, 'new', ?)",
+            (word_id, uid, today)
         )
         db.commit()
         prog = db.execute(
-            "SELECT * FROM user_word_progress WHERE word_id = ?", (word_id,)
+            "SELECT * FROM user_word_progress WHERE word_id = ? AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+            (word_id, uid, uid)
         ).fetchone()
 
     # SM-2计算
@@ -166,19 +232,17 @@ def api_study_result():
         updated["last_review_result"], word_id
     ))
 
-    # 更新每日记录
+    # 更新每日记录（按用户）
     existing = db.execute(
-        "SELECT id FROM study_log WHERE study_date=?", (today,)
+        "SELECT id FROM study_log WHERE study_date=? AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (today, uid, uid)
     ).fetchone()
     if existing:
-        db.execute(
-            "UPDATE study_log SET words_learned=words_learned+1 WHERE study_date=?",
-            (today,)
-        )
+        db.execute("UPDATE study_log SET words_learned=words_learned+1 WHERE id=?", (existing["id"],))
     else:
         db.execute(
-            "INSERT INTO study_log (study_date, words_learned) VALUES (?, 1)",
-            (today,)
+            "INSERT INTO study_log (study_date, user_id, words_learned) VALUES (?, ?, 1)",
+            (today, uid)
         )
 
     db.commit()
@@ -204,10 +268,14 @@ def api_study_result():
 def api_toggle_mark():
     data = request.get_json()
     word_id = data["word_id"]
+    uid = get_user_id()
     db = get_db()
-    prog = db.execute("SELECT * FROM user_word_progress WHERE word_id=?", (word_id,)).fetchone()
+    prog = db.execute(
+        "SELECT * FROM user_word_progress WHERE word_id=? AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (word_id, uid, uid)
+    ).fetchone()
     if not prog:
-        db.execute("INSERT INTO user_word_progress (word_id, is_marked) VALUES (?, 1)", (word_id,))
+        db.execute("INSERT INTO user_word_progress (word_id, user_id, is_marked) VALUES (?, ?, 1)", (word_id, uid))
         db.commit()
         marked = True
     else:
@@ -220,12 +288,14 @@ def api_toggle_mark():
 
 @app.route("/api/words/marked")
 def api_marked_words():
+    uid = get_user_id()
     db = get_db()
     rows = db.execute("""
         SELECT w.*, up.is_marked FROM words w
         JOIN user_word_progress up ON w.id = up.word_id
-        WHERE up.is_marked = 1 ORDER BY w.word
-    """).fetchall()
+        WHERE up.is_marked = 1 AND (up.user_id = ? OR (up.user_id IS NULL AND ? IS NULL))
+        ORDER BY w.word
+    """, (uid, uid)).fetchall()
     db.close()
     return jsonify([dict(r) for r in rows])
 
@@ -437,38 +507,106 @@ def api_word_detail(word_id):
         return jsonify({"error": "not found"}), 404
     meanings = db.execute("SELECT * FROM word_meanings WHERE word_id=?", (word_id,)).fetchall()
     points = db.execute("SELECT * FROM word_exam_points WHERE word_id=?", (word_id,)).fetchall()
+
+    # AI补全：仅当用户手动点击"AI补充"按钮时触发(?enrich=1)
+    enrich = request.args.get("enrich", "0")
+    need_enrich = enrich == "1" and ((len(meanings) == 0) or (len(points) == 0) or (not w["root_affix"]) or (not w["derivatives"]))
+    if need_enrich:
+        from ai_client import chat
+        prompt = f"""请为单词 **{w['word']}** 生成以下信息，全部用中文：
+1. 词根词缀拆解（如"ab- 离开 + don 给 → 放弃"）
+2. 派生词列表（"派生词1(词性): 释义; 派生词2(词性): 释义"）
+3. 2个真题风格例句（中英文对照，考研难度）
+4. 2-3个**词组搭配**（如"abandon oneself to 沉溺于"，含中文释义）
+5. 熟词生义（如有）
+6. 考试常考考点（固定搭配、易混辨析等）
+
+返回JSON：{{"root_affix":"...", "derivatives":"...", "examples":[{{"en":"...","cn":"..."}},{{"en":"...","cn":"..."}}], "collocations":[{{"phrase":"...","meaning":"..."}}], "meanings":[{{"type":"熟词生义","meaning":"...","example":"..."}}], "exam_points":[{{"type":"考点","desc":"...","example":"..."}}]}}"""
+        try:
+            resp = chat(prompt, "你是考研英语词汇专家。只返回JSON。", 800)
+            data = json.loads(resp.strip().strip("`").strip("json").strip())
+
+            if data.get("root_affix"):
+                db.execute("UPDATE words SET root_affix=? WHERE id=?", (data["root_affix"], word_id))
+            if data.get("derivatives"):
+                db.execute("UPDATE words SET derivatives=? WHERE id=?", (data["derivatives"], word_id))
+            if data.get("examples"):
+                for ex in data["examples"]:
+                    db.execute(
+                        "INSERT OR IGNORE INTO word_meanings (word_id, meaning_type, meaning, example) VALUES (?, '例句', ?, ?)",
+                        (word_id, ex["cn"], ex["en"])
+                    )
+            if data.get("meanings"):
+                for m in data["meanings"]:
+                    db.execute(
+                        "INSERT OR IGNORE INTO word_meanings (word_id, meaning_type, meaning, example) VALUES (?, ?, ?, ?)",
+                        (word_id, m.get("type","熟词生义"), m.get("meaning",""), m.get("example",""))
+                    )
+            if data.get("collocations"):
+                for co in data["collocations"]:
+                    db.execute(
+                        "INSERT OR IGNORE INTO word_meanings (word_id, meaning_type, meaning, example) VALUES (?, '词组搭配', ?, ?)",
+                        (word_id, co.get("phrase",""), co.get("meaning",""))
+                    )
+            if data.get("exam_points"):
+                for p in data["exam_points"]:
+                    db.execute(
+                        "INSERT OR IGNORE INTO word_exam_points (word_id, point_type, description, example) VALUES (?, ?, ?, ?)",
+                        (word_id, p.get("type","考点"), p.get("desc",""), p.get("example",""))
+                    )
+            db.commit()
+            w = db.execute("SELECT * FROM words WHERE id=?", (word_id,)).fetchone()
+            meanings = db.execute("SELECT * FROM word_meanings WHERE word_id=?", (word_id,)).fetchall()
+            points = db.execute("SELECT * FROM word_exam_points WHERE word_id=?", (word_id,)).fetchall()
+        except Exception as e:
+            print(f"AI enrichment failed for {w['word']}: {e}")
+
+    # 查同根词
+    siblings = []
+    if w["root_affix"]:
+        siblings = db.execute(
+            "SELECT id, word, meaning FROM words WHERE id!=? AND root_affix!='' AND root_affix LIKE ? LIMIT 10",
+            (word_id, f"%{w['word'][:3]}%")
+        ).fetchall()
+
     prog = db.execute("SELECT * FROM user_word_progress WHERE word_id=?", (word_id,)).fetchone()
     db.close()
     return jsonify({
         "word": dict(w),
         "meanings": [dict(m) for m in meanings],
         "exam_points": [dict(p) for p in points],
+        "siblings": [dict(s) for s in siblings],
         "progress": dict(prog) if prog else None
     })
 
 # === 通用 API ===
 @app.route("/api/stats")
 def api_stats():
+    uid = get_user_id()
     db = get_db()
     total = db.execute("SELECT COUNT(*) as n FROM words").fetchone()["n"] or 0
     mastered = db.execute(
-        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='mastered'"
+        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='mastered' AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
     ).fetchone()["n"] or 0
     learning = db.execute(
-        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='learning'"
+        "SELECT COUNT(*) as n FROM user_word_progress WHERE status='learning' AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
     ).fetchone()["n"] or 0
     review_due = db.execute(
-        "SELECT COUNT(*) as n FROM user_word_progress WHERE next_review_date <= date('now','localtime') AND status!='mastered'"
+        "SELECT COUNT(*) as n FROM user_word_progress WHERE next_review_date <= date('now','localtime') AND status!='mastered' AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
     ).fetchone()["n"] or 0
     today = db.execute(
-        "SELECT words_learned, words_reviewed FROM study_log WHERE study_date=date('now','localtime')"
+        "SELECT words_learned, words_reviewed FROM study_log WHERE study_date=date('now','localtime') AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+        (uid, uid)
     ).fetchone()
     today_words = today["words_learned"] if today else 0
     today_reviewed = today["words_reviewed"] if today else 0
 
-    # 计算连续天数
     dates = db.execute(
-        "SELECT study_date FROM study_log ORDER BY study_date DESC LIMIT 365"
+        "SELECT study_date FROM study_log WHERE (user_id = ? OR (user_id IS NULL AND ? IS NULL)) ORDER BY study_date DESC LIMIT 365",
+        (uid, uid)
     ).fetchall()
     streak = 0
     from datetime import date as dt, timedelta
@@ -488,7 +626,8 @@ def api_stats():
     for i in range(6, -1, -1):
         day = (dt.today() - timedelta(days=i)).isoformat()
         row = db.execute(
-            "SELECT words_learned FROM study_log WHERE study_date=?", (day,)
+            "SELECT words_learned FROM study_log WHERE study_date=? AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))",
+            (day, uid, uid)
         ).fetchone()
         week.append({"date": day[5:], "count": row["words_learned"] if row else 0})
 

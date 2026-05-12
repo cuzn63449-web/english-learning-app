@@ -30,6 +30,7 @@ function sendMsg() {
         addBubble('assistant', d.reply);
         chatHistory.push({role:'user', content:msg});
         chatHistory.push({role:'assistant', content:d.reply});
+        updateCostBubble();
     });
 }
 

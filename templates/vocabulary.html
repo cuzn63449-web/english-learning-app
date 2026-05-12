@@ -56,8 +56,11 @@ function renderList(words) {
     var html = '';
     words.forEach(function(w){
         html += '<div class="word-item" onclick="openDetail('+w.id+')">';
-        html += '<div><div class="word">'+w.word;
-        if (w.frequency) html += ' <span class="tag tag-pink">考频'+w.frequency+'</span>';
+        // 推荐判断：排除基础词，保留考研核心词
+        var basicWords = ['a','an','the','is','am','are','was','were','be','been','being','have','has','had','do','does','did','will','would','can','could','may','might','shall','should','must','i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their','and','or','but','if','so','nor','for','yet','not','no','yes','to','in','on','at','of','by','from','up','out','down','off','over','under','also','too','very','just','only','then','now','here','there','this','that','these','those','one','two','each','every','all','both','few','more','most','other','some','such','than','too','very','well','far','much','many','good','bad','big','small','old','new'];
+        var isBasic = basicWords.indexOf(w.word.toLowerCase()) >= 0;
+        var isImportant = !isBasic && w.meaning && (w.meaning.indexOf(';') > 0 || w.meaning.length > 30 || w.part_of_speech.indexOf(';') > 0);
+        html += '<div><div class="word">'+w.word+(isImportant?' <span class="tag tag-gold" style="font-size:10px">推荐AI</span>':'');
         html += '</div><div class="meaning">'+w.meaning.substring(0,50)+'</div></div>';
         html += '<div style="font-size:12px;color:var(--text-light)">'+(w.part_of_speech||'')+'</div>';
         html += '</div>';
@@ -76,10 +79,13 @@ function renderPagination() {
     document.getElementById('pagination').innerHTML = html;
 }
 
-function openDetail(id) {
+function openDetail(id, enrich) {
     showLoading();
-    fetch('/api/words/'+id).then(function(r){ return r.json(); }).then(function(d){
+    var url = '/api/words/'+id;
+    if (enrich) url += '?enrich=1';
+    fetch(url).then(function(r){ return r.json(); }).then(function(d){
         hideLoading();
+        if (enrich) updateCostBubble();
         var w = d.word;
         var html = '<div style="position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;background:var(--card)">';
         html += '<h2 style="margin:0;color:var(--blue-dark)">'+w.word+'</h2>';
@@ -89,23 +95,90 @@ function openDetail(id) {
         if (w.frequency) html += ' <span class="tag tag-gold">考频: '+w.frequency+'</span>';
         html += '</p>';
         html += '<div class="section-title">释义</div><p>'+w.meaning+'</p>';
-        if (w.root_affix) html += '<div class="section-title">词根词缀</div><p>'+w.root_affix+'</p>';
-        if (w.derivatives) html += '<div class="section-title">派生词</div><p>'+w.derivatives+'</p>';
-        if (d.meanings.length > 0) {
-            html += '<div class="section-title">熟词生义</div>';
-            d.meanings.forEach(function(m){ html += '<p style="font-size:14px;margin-bottom:4px"><strong>'+m.meaning_type+':</strong> '+m.meaning+(m.example?' <span style="color:var(--text-light)">例: '+m.example+'</span>':''); });
+
+        // 例句（默认显示）
+        var examples = (d.meanings||[]).filter(function(m){ return m.meaning_type==='例句'; });
+        if (examples.length > 0) {
+            html += '<div style="background:var(--pink-light);padding:12px;border-radius:var(--radius-sm);margin:12px 0">';
+            examples.forEach(function(ex){ html += '<p style="font-size:14px;margin-bottom:4px">📖 '+ex.example+'</p><p style="font-size:13px;color:var(--text-light);margin-bottom:8px;padding-left:16px">'+ex.meaning+'</p>'; });
+            html += '</div>';
         }
-        if (d.exam_points.length > 0) {
-            html += '<div class="section-title">考试考点</div>';
-            d.exam_points.forEach(function(p){ html += '<p style="font-size:14px;margin-bottom:4px"><strong>'+p.point_type+':</strong> '+p.description+(p.example?' <span style="color:var(--text-light)">例: '+p.example+'</span>':''); });
+
+        // 标签页按钮
+        // 如果数据不完整，显示AI补充按钮
+        var hasData = (d.meanings && d.meanings.length > 0) || (d.exam_points && d.exam_points.length > 0) || w.root_affix;
+        if (!hasData) {
+            html += '<button class="btn btn-sm btn-outline" style="width:100%;margin:8px 0" onclick="closeDetail();openDetail('+w.id+',true)">🤖 AI补充（约¥0.002）</button>';
         }
-        if (d.progress) html += '<div class="section-title">学习进度</div><p>状态: <span class="tag tag-green">'+d.progress.status+'</span> | 下次复习: '+d.progress.next_review_date+'</p>';
+
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0" id="tabBtns">';
+        var tabs = [['root','词根词缀'],['deriv','派生词'],['colloc','词组搭配'],['exam','考点'],['extra','熟词生义'],['sibling','同根词']];
+        tabs.forEach(function(t){
+            html += '<button class="btn btn-sm btn-outline tab-btn" onclick="switchTab(\''+t[0]+'\')">'+t[1]+'</button>';
+        });
+        html += '</div>';
+
+        // 内容区
+        html += '<div id="tabContentArea" style="min-height:40px;padding:8px 0"></div>';
+
+        // 所有数据存在JS变量里
+        html += '<script id="wordData" type="application/json">'+JSON.stringify(d)+'</sc'+'ript>';
+
+        if (d.progress) html += '<div class="section-title" style="margin-top:12px">学习进度</div><p>状态: <span class="tag tag-green">'+d.progress.status+'</span> | 下次复习: '+d.progress.next_review_date+'</p>';
+
         document.getElementById('detailCard').innerHTML = html;
         document.getElementById('detailOverlay').style.display = 'flex';
+
+        // 解析数据并默认显示词根词缀
+        setTimeout(function(){
+            window._wordData = d;
+            switchTab('root');
+        }, 100);
     });
 }
 
 function closeDetail() { document.getElementById('detailOverlay').style.display = 'none'; }
+
+function switchTab(tab) {
+    var d = window._wordData;
+    if (!d) return;
+    var w = d.word, html = '';
+    var btns = document.querySelectorAll('.tab-btn');
+    btns.forEach(function(b){ b.className = 'btn btn-sm btn-outline tab-btn'; });
+
+    if (tab === 'root') {
+        btns[0].className = 'btn btn-sm btn-primary tab-btn';
+        html = w.root_affix ? '<p>'+w.root_affix+'</p>' : '<p style="color:var(--text-light)">暂无词根词缀信息</p>';
+    } else if (tab === 'deriv') {
+        btns[1].className = 'btn btn-sm btn-primary tab-btn';
+        html = w.derivatives ? '<p>'+w.derivatives+'</p>' : '<p style="color:var(--text-light)">暂无派生词信息</p>';
+    } else if (tab === 'colloc') {
+        btns[2].className = 'btn btn-sm btn-primary tab-btn';
+        var collocs = (d.meanings||[]).filter(function(m){ return m.meaning_type==='词组搭配'; });
+        if (collocs.length > 0) {
+            collocs.forEach(function(c){ html += '<p style="font-size:14px;margin-bottom:4px"><strong>'+c.meaning+'</strong>'+'</p><p style="font-size:13px;color:var(--text-light);margin-bottom:8px">'+c.example+'</p>'; });
+        } else { html = '<p style="color:var(--text-light)">暂无词组搭配信息</p>'; }
+    } else if (tab === 'exam') {
+        btns[3].className = 'btn btn-sm btn-primary tab-btn';
+        if (d.exam_points.length > 0) {
+            d.exam_points.forEach(function(p){ html += '<p style="font-size:14px;margin-bottom:6px"><strong>'+p.point_type+':</strong> '+p.description+(p.example?' <span style="color:var(--text-light)">例: '+p.example+'</span>':''); });
+        } else { html = '<p style="color:var(--text-light)">暂无考点信息</p>'; }
+    } else if (tab === 'extra') {
+        btns[4].className = 'btn btn-sm btn-primary tab-btn';
+        var extras = (d.meanings||[]).filter(function(m){ return m.meaning_type==='熟词生义'; });
+        if (extras.length > 0) {
+            extras.forEach(function(m){ html += '<p style="font-size:14px;margin-bottom:4px"><strong>'+m.meaning+'</strong>'+'</p><p style="font-size:13px;color:var(--text-light);margin-bottom:8px">'+m.example+'</p>'; });
+        } else { html = '<p style="color:var(--text-light)">暂无熟词生义信息</p>'; }
+    } else if (tab === 'sibling') {
+        btns[5].className = 'btn btn-sm btn-primary tab-btn';
+        if (d.siblings && d.siblings.length > 0) {
+            d.siblings.forEach(function(s){
+                html += '<span class="tag tag-blue" style="cursor:pointer;margin:2px" onclick="event.stopPropagation();closeDetail();openDetail('+s.id+')">'+s.word+'</span> ';
+            });
+        } else { html = '<p style="color:var(--text-light)">暂无同根词信息</p>'; }
+    }
+    document.getElementById('tabContentArea').innerHTML = html;
+}
 
 search(1);
 </script>
