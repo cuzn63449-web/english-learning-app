@@ -57,6 +57,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_word_progress (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             word_id INTEGER NOT NULL,
+            user_id INTEGER,
             status TEXT DEFAULT 'new',
             ease_factor REAL DEFAULT 2.5,
             interval_days INTEGER DEFAULT 0,
@@ -67,12 +68,13 @@ def init_db():
             last_review_result TEXT,
             is_marked INTEGER DEFAULT 0,
             FOREIGN KEY (word_id) REFERENCES words(id) ON DELETE CASCADE,
-            UNIQUE(word_id)
+            UNIQUE(word_id, user_id)
         );
 
         CREATE TABLE IF NOT EXISTS user_wordbook (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             word TEXT NOT NULL,
+            user_id INTEGER,
             phonetic TEXT,
             meaning TEXT,
             source TEXT,
@@ -83,6 +85,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS study_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             study_date DATE NOT NULL DEFAULT (date('now', 'localtime')),
+            user_id INTEGER,
             words_learned INTEGER DEFAULT 0,
             words_reviewed INTEGER DEFAULT 0,
             quiz_count INTEGER DEFAULT 0,
